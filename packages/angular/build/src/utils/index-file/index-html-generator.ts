@@ -16,6 +16,7 @@ import { InlineCriticalCssProcessor } from './inline-critical-css';
 import { InlineFontsProcessor } from './inline-fonts';
 import { addNgcmAttribute } from './ngcm-attribute';
 import { addNonce } from './nonce';
+import { autoCsp } from './auto-csp';
 
 type IndexHtmlGeneratorPlugin = (
   html: string,
@@ -43,6 +44,7 @@ export interface IndexHtmlGeneratorOptions {
   cache?: NormalizedCachedOptions;
   imageDomains?: string[];
   generateDedicatedSSRContent?: boolean;
+  autoCsp?: boolean;
 }
 
 export type IndexHtmlTransform = (content: string) => Promise<string>;
@@ -85,6 +87,11 @@ export class IndexHtmlGenerator {
     if (options.generateDedicatedSSRContent) {
       this.csrPlugins.push(addNgcmAttributePlugin());
       this.ssrPlugins.push(addEventDispatchContractPlugin(), addNoncePlugin());
+    }
+
+    // Auto-CSP (as the last step)
+    if (options.autoCsp) {
+      this.csrPlugins.push(autoCspPlugin());
     }
   }
 
@@ -196,6 +203,10 @@ function inlineCriticalCssPlugin(generator: IndexHtmlGenerator): IndexHtmlGenera
 
 function addNoncePlugin(): IndexHtmlGeneratorPlugin {
   return (html) => addNonce(html);
+}
+
+function autoCspPlugin(): IndexHtmlGeneratorPlugin {
+  return (html) => autoCsp(html);
 }
 
 function postTransformPlugin({ options }: IndexHtmlGenerator): IndexHtmlGeneratorPlugin {

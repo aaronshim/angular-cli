@@ -94,6 +94,7 @@ export async function generateIndexHtml(
       buildOptions.prerenderOptions ||
       buildOptions.appShellOptions
     ),
+    autoCsp: true,
   });
 
   indexHtmlGenerator.readAsset = readAsset;
