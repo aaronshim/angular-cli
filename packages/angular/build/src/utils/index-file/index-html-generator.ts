@@ -33,6 +33,10 @@ export interface IndexHtmlGeneratorProcessOptions {
   hints?: { url: string; mode: HintMode; as?: string }[];
 }
 
+export interface AutoCspOptions {
+  unsafeEval: boolean;
+}
+
 export interface IndexHtmlGeneratorOptions {
   indexPath: string;
   deployUrl?: string;
@@ -44,7 +48,7 @@ export interface IndexHtmlGeneratorOptions {
   cache?: NormalizedCachedOptions;
   imageDomains?: string[];
   generateDedicatedSSRContent?: boolean;
-  autoCsp?: boolean;
+  autoCsp?: AutoCspOptions;
 }
 
 export type IndexHtmlTransform = (content: string) => Promise<string>;
@@ -91,7 +95,7 @@ export class IndexHtmlGenerator {
 
     // Auto-CSP (as the last step)
     if (options.autoCsp) {
-      this.csrPlugins.push(autoCspPlugin());
+      this.csrPlugins.push(autoCspPlugin(options.autoCsp.unsafeEval));
     }
   }
 
@@ -205,8 +209,8 @@ function addNoncePlugin(): IndexHtmlGeneratorPlugin {
   return (html) => addNonce(html);
 }
 
-function autoCspPlugin(): IndexHtmlGeneratorPlugin {
-  return (html) => autoCsp(html);
+function autoCspPlugin(unsafeEval: boolean): IndexHtmlGeneratorPlugin {
+  return (html) => autoCsp(html, unsafeEval);
 }
 
 function postTransformPlugin({ options }: IndexHtmlGenerator): IndexHtmlGeneratorPlugin {
