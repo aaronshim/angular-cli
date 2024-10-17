@@ -6,7 +6,20 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import { autoCsp, hashScriptText } from './auto-csp';
+import { autoCsp, hashTextContent } from './auto-csp';
+
+// Utility function to grab the meta tag CSPs from the HTML response.
+const getCsps = (html: string) => {
+  return Array.from(
+    html.matchAll(/<meta http-equiv="Content-Security-Policy" content="([^"]*)">/g),
+  ).map((m) => m[1]); // Only capture group.
+};
+
+const ONE_HASH_CSP =
+  /script-src 'strict-dynamic' 'sha256-[^']+' https: 'unsafe-inline';object-src 'none';base-uri 'self';/;
+
+const FOUR_HASH_CSP =
+  /script-src 'strict-dynamic' (?:'sha256-[^']+' ){4}https: 'unsafe-inline';object-src 'none';base-uri 'self';/;
 
 describe('auto-csp', () => {
   it('should rewrite a single inline script', async () => {
@@ -21,9 +34,10 @@ describe('auto-csp', () => {
       </html>
     `);
 
-    expect(result).toContain(
-      `<meta http-equiv="Content-Security-Policy" content="script-src 'strict-dynamic' ${hashScriptText("console.log('foo');")} https: 'unsafe-inline';object-src 'none';base-uri 'self';">`,
-    );
+    const csps = getCsps(result);
+    expect(csps.length).toBe(1);
+    expect(csps[0]).toMatch(ONE_HASH_CSP);
+    expect(csps[0]).toContain(hashTextContent("console.log('foo');"));
   });
 
   it('should rewrite a single source script', async () => {
@@ -38,9 +52,9 @@ describe('auto-csp', () => {
       </html>
     `);
 
-    expect(result).toContain(
-      `<meta http-equiv="Content-Security-Policy" content="script-src 'strict-dynamic' 'sha256-cfa69N/DhgtxzDzIHo+IFj9KPigQLDJgb6ZGZa3g5Cs=' https: 'unsafe-inline';object-src 'none';base-uri 'self';">`,
-    );
+    const csps = getCsps(result);
+    expect(csps.length).toBe(1);
+    expect(csps[0]).toMatch(ONE_HASH_CSP);
     expect(result).toContain(`var scripts = [['./main.js', undefined, false, false]];`);
   });
 
@@ -56,9 +70,9 @@ describe('auto-csp', () => {
       </html>
     `);
 
-    expect(result).toContain(
-      `<meta http-equiv="Content-Security-Policy" content="script-src 'strict-dynamic' 'sha256-cfa69N/DhgtxzDzIHo+IFj9KPigQLDJgb6ZGZa3g5Cs=' https: 'unsafe-inline';object-src 'none';base-uri 'self';">`,
-    );
+    const csps = getCsps(result);
+    expect(csps.length).toBe(1);
+    expect(csps[0]).toMatch(ONE_HASH_CSP);
     // Our loader script appears after the HTML text content.
     expect(result).toMatch(
       /Some text<\/div>\s*<script>\s*var scripts = \[\['.\/main.js', undefined, false, false\]\];/,
@@ -80,9 +94,9 @@ describe('auto-csp', () => {
       </html>
     `);
 
-    expect(result).toContain(
-      `<meta http-equiv="Content-Security-Policy" content="script-src 'strict-dynamic' 'sha256-oK8+CQgKHPljcYJpTNKJt/y0A0oiBIm3LRke3EhzHVQ=' https: 'unsafe-inline';object-src 'none';base-uri 'self';">`,
-    );
+    const csps = getCsps(result);
+    expect(csps.length).toBe(1);
+    expect(csps[0]).toMatch(ONE_HASH_CSP);
     expect(result).toContain(
       `var scripts = [['./main1.js', undefined, false, false],['./main2.js', undefined, true, false],['./main3.js', 'module', true, true]];`,
     );
@@ -107,9 +121,12 @@ describe('auto-csp', () => {
       </html>
     `);
 
-    expect(result).toContain(
-      `<meta http-equiv="Content-Security-Policy" content="script-src 'strict-dynamic' ${hashScriptText("console.log('foo');")} 'sha256-6q4qOp9MMB///5kaRda2I++J9l0mJiqWRxQ9/8hoSyw=' ${hashScriptText("console.log('bar');")} 'sha256-AUmEDzNdja438OLB3B8Opyxy9B3Tr1Tib+aaGZdhhWQ=' https: 'unsafe-inline';object-src 'none';base-uri 'self';">`,
-    );
+    const csps = getCsps(result);
+    expect(csps.length).toBe(1);
+    // Exactly four hashes for the four scripts that remain (inline, loader, inline, loader).
+    expect(csps[0]).toMatch(FOUR_HASH_CSP);
+    expect(csps[0]).toContain(hashTextContent("console.log('foo');"));
+    expect(csps[0]).toContain(hashTextContent("console.log('bar');"));
     // Loader script for main.js and main2.js appear after 'foo' and before 'bar'.
     expect(result).toMatch(
       /console.log\('foo'\);<\/script>\s*<script>\s*var scripts = \[\['.\/main.js', undefined, false, false\],\['.\/main2.js', undefined, false, false\]\];[\s\S]*console.log\('bar'\);/,

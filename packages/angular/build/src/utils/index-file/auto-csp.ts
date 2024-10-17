@@ -6,10 +6,10 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import { htmlRewritingStream } from './html-rewriting-stream';
-import { StartTag } from 'parse5-sax-parser';
-import * as crypto from 'crypto';
 import { RewritingStream } from 'parse5-html-rewriting-stream';
+import { StartTag } from 'parse5-sax-parser';
+import { htmlRewritingStream } from './html-rewriting-stream';
+import * as crypto from 'crypto';
 
 /**
  * The hash function to use for hash directives to use in the CSP.
@@ -43,7 +43,6 @@ const JS_MIME_TYPES = new Set([
  * Store the appropriate attributes of a sourced script tag to generate the loader script.
  */
 interface SrcScriptTag {
-  scriptType: 'src';
   src: string;
   type?: string;
   async: boolean;
@@ -92,27 +91,9 @@ function shouldDynamicallyLoadScriptTagBasedOnType(scriptType: string | undefine
  *     include whitespaces and newlines!
  * @returns The hash of the text formatted appropriately for CSP.
  */
-export function hashScriptText(scriptText: string): string {
+export function hashTextContent(scriptText: string): string {
   const hash = crypto.createHash(HASH_FUNCTION).update(scriptText, 'utf-8').digest('base64');
   return `'${HASH_FUNCTION}-${hash}'`;
-}
-
-/**
- * Generates the dynamic loading script and puts it in the rewriter and adds the hash of the dynamic
- * loader script to the collection of hashes to add to the <meta> tag CSP.
- *
- * @param scriptContent The current streak of <script src="..."> tags
- * @param hashes The array of hashes to include in the final CSP
- * @param rewriter Where to emit tags to
- */
-function emitLoaderScript(
-  scriptContent: SrcScriptTag[],
-  hashes: string[],
-  rewriter: RewritingStream,
-) {
-  const loaderScript = createLoaderScript(scriptContent);
-  hashes.push(hashScriptText(loaderScript));
-  rewriter.emitRaw(`<script>${loaderScript}</script>`);
 }
 
 /**
@@ -130,6 +111,17 @@ export async function autoCsp(html: string): Promise<string> {
   let scriptContent: SrcScriptTag[] = [];
   let hashes: string[] = [];
 
+  /**
+   * Generates the dynamic loading script and puts it in the rewriter and adds the hash of the dynamic
+   * loader script to the collection of hashes to add to the <meta> tag CSP.
+   */
+  function emitLoaderScript() {
+    const loaderScript = createLoaderScript(scriptContent);
+    hashes.push(hashTextContent(loaderScript));
+    rewriter.emitRaw(`<script>${loaderScript}</script>`);
+    scriptContent = [];
+  }
+
   rewriter.on('startTag', (tag, html) => {
     if (tag.tagName === 'script') {
       openedScriptTag = tag;
@@ -140,7 +132,6 @@ export async function autoCsp(html: string): Promise<string> {
         const scriptType = getScriptAttributeValue(tag, 'type');
         if (shouldDynamicallyLoadScriptTagBasedOnType(scriptType)) {
           scriptContent.push({
-            scriptType: 'src',
             src: src,
             type: scriptType,
             async: !(getScriptAttributeValue(tag, 'async') === undefined),
@@ -157,15 +148,14 @@ export async function autoCsp(html: string): Promise<string> {
     // (One edge case is where there are no more opening tags after the last <script src="..."> is
     // closed, but this case is handled below with the final </body> tag.)
     if (scriptContent.length > 0) {
-      emitLoaderScript(scriptContent, hashes, rewriter);
-      scriptContent = [];
+      emitLoaderScript();
     }
     rewriter.emitStartTag(tag);
   });
 
   rewriter.on('text', (tag, html) => {
     if (openedScriptTag && !getScriptAttributeValue(openedScriptTag, 'src')) {
-      hashes.push(hashScriptText(html));
+      hashes.push(hashTextContent(html));
     }
     rewriter.emitText(tag);
   });
@@ -185,8 +175,7 @@ export async function autoCsp(html: string): Promise<string> {
     if (tag.tagName === 'body' || tag.tagName === 'html') {
       // Write the loader script if a string of <script>s were the last opening tag of the document.
       if (scriptContent.length > 0) {
-        emitLoaderScript(scriptContent, hashes, rewriter);
-        scriptContent = [];
+        emitLoaderScript();
       }
     }
     rewriter.emitEndTag(tag);
