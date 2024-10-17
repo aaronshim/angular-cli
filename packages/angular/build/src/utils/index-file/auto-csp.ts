@@ -280,7 +280,7 @@ function createLoaderScript(srcList: SrcScriptTag[], enableTrustedTypes = false)
   const srcListFormatted = srcList
     .map(
       (s) =>
-        `['${encodeURI(s.src)}', ${s.type ? "'" + encodeURI(s.type) + "'" : undefined}, ${s.async ? 'true' : 'false'}, ${s.defer ? 'true' : 'false'}]`,
+        `['${encodeURI(s.src).replaceAll("'", "\\'")}', ${s.type ? "'" + encodeURI(s.type) + "'" : undefined}, ${s.async ? 'true' : 'false'}, ${s.defer ? 'true' : 'false'}]`,
     )
     .join();
   return enableTrustedTypes

@@ -104,6 +104,35 @@ describe('auto-csp', () => {
     expect(Array.from(result.matchAll(/\<script\>/g)).length).toEqual(1);
   });
 
+  it('should rewrite source scripts with weird URLs', async () => {
+    const result = await autoCsp(`
+      <html>
+        <head>
+        </head>
+        <body>
+          <script src="/foo&amp;bar"></script>
+          <script src="/one'two\\'three\\\\'four\\\\\\'five"></script>
+          <script src="/one&two&amp;three&amp;amp;four"></script>
+          <script src="./</script>"></script>
+          <div>Some text </div>
+        </body>
+      </html>
+    `);
+
+    const csps = getCsps(result);
+    expect(csps.length).toBe(1);
+    expect(csps[0]).toMatch(ONE_HASH_CSP);
+    // &amp; encodes correctly
+    expect(result).toContain(`'/foo&bar'`);
+    // Impossible to escape a string and create invalid loader JS with a '
+    // (Quotes and backslashes work)
+    expect(result).toContain(`'/one\\'two%5C\\'three%5C%5C\\'four%5C%5C%5C\\'five'`);
+    // HTML entities work
+    expect(result).toContain(`'/one&two&three&amp;four'`);
+    // Cannot escape JS context to HTML
+    expect(result).toContain(`'./%3C/script%3E'`);
+  });
+
   it('should rewrite all script tags', async () => {
     const result = await autoCsp(`
       <html>
